@@ -1,0 +1,17 @@
+{
+    "initMode":1,
+    "portName": "/dev/lifter_4",
+    "baudRate": 38400 ,
+    "dataFormat":"hex",
+    "reductionRatio":1000,
+    "posOffset": 0,
+    "responseTimeout":30,
+    "motorSpd":500,
+    "motorTime":110,
+    "callBackMode":0,
+    "upLimitVal":230,
+    "downLimitVal":0,
+    "initSpd":-120,
+    "initPos":230,
+    "motorStallCurrent":5
+}

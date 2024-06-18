@@ -1,0 +1,16 @@
+{
+    "initMode":0,
+    "baudRate": 38400 ,
+    "dataFormat":"hex",
+    "reductionRatio":6250,
+    "posOffset": 0,
+    "responseTimeout":5,
+    "motorSpd":3000,
+    "motorTime":0,
+    "callBackMode":0,
+    "upLimitVal":10000000,
+    "downLimitVal":-50,
+    "initSpd":-800,
+    "initPos":0,
+    "motorStallCurrent":11
+}

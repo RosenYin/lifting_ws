@@ -1,0 +1,7 @@
+int64 val 
+int64 mode
+string id
+---
+string message
+bool success
+int16 code

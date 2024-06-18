@@ -1,0 +1,16 @@
+{
+    "portName": "/dev/tty485dev",
+    "baudRate": 38400 ,
+    "dataFormat":"hex",
+    "reductionRatio":10937.5,
+    "posOffset": 0,
+    "responseTimeout":100,
+    "motorSpd":1500,
+    "motorTime":0,
+    "callBackMode":0,
+    "upLimitVal":320,
+    "downLimitVal":0,
+    "initSpd":-800,
+    "initPos":150,
+    "motorStallCurrent":5
+}

@@ -1,0 +1,12 @@
+<launch>
+	<!-- 设置launch文件的参数 -->
+    <arg name="motor_id_" default="1"/>
+    <arg name="lifter_ns" default="lifter_1"/>
+
+	<group ns="$(arg lifter_ns)">
+    <!-- 运行robot_state_publisher节点，发布tf  -->
+    <node name="lifting_ctrl_850pro_service_node_output" pkg="lifting_ctrl" type="lifting_ctrl_service_node_850pro.py"  output="screen" >
+        <param name="motor_id" type="int" value="$(arg motor_id_)" />
+    </node>
+    </group>
+</launch>
