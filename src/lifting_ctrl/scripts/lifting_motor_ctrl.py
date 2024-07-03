@@ -123,25 +123,16 @@ class C_LiftingMotorCtrl():
             self.__port_name=self.GetMotorJsonConfig()["portName"]
         else: self.__port_name = self.JudgeCurrentMotorPort(ignore_port)
         print("------self.__port_name-------",self.__port_name)
-        # 开启电机
-        self.StartCtrlMotor()
-        # 电机设置绝对位置模式
-        self.MotorSetAbsoluteMode()
-        # 清除故障
-        self.MotorClearBug()
-        # 开启通讯中断自动停机
-        self.MotorAutoStopStart()
         # 设定电机启停时间
         if('motorTime' in self.GetMotorJsonConfig().keys()):
-            self.MotorSetTime(self.GetMotorJsonConfig()["motorTime"])
-        else: self.MotorSetTime(0)
+            self.__motor_time = self.GetMotorJsonConfig()["motorTime"]
+        else: 
+            self.__motor_time = 0
         # 设置电机最大速度
         if('motorSpd' in self.GetMotorJsonConfig().keys()):
-            self.motorSpd = abs(self.GetMotorJsonConfig()["motorSpd"])
-            self.MotorSetMaxSpd(self.GetMotorJsonConfig()["motorSpd"])
+            self.motorSpd = self.GetMotorJsonConfig()["motorSpd"]
         else: 
             self.motorSpd = 1000
-            self.MotorSetMaxSpd(1000)
         # 电机减速比，执行末端运行1mm，电机执行多少圈数n * 10000 = 脉冲数
         if('reductionRatio' in self.GetMotorJsonConfig().keys()):
             self.reductionRatio = self.GetMotorJsonConfig()["reductionRatio"]
@@ -177,6 +168,22 @@ class C_LiftingMotorCtrl():
 
     def MotorInit(self, motor_id:int):
         self.__init__(motor_id)
+
+    def MotorConfigInit(self):
+        # 开启电机
+        self.StartCtrlMotor()
+        # 电机设置绝对位置模式
+        self.MotorSetAbsoluteMode()
+        # 清除故障
+        self.MotorClearBug()
+        # 开启通讯中断自动停机
+        self.MotorAutoStopStart()
+        # 设定电机启停时间
+        self.MotorSetTime(self.__motor_time)
+        # self.MotorSetSpeedTime(self.__motor_time)
+        # 设置电机最大速度
+        self.MotorSetMaxSpd(abs(self.motorSpd))
+
     def GetMotorJsonConfig(self):
         return self.__deal_data.GetPortJsonConfig()
     def GetLiftPortName(self):
@@ -197,17 +204,21 @@ class C_LiftingMotorCtrl():
             for l in workable_port_list :
                 if(l[:11] == '/dev/ttyUSB' and l!=ignore_port):
                     print("--------", self.__motor_id,"--",l)
-                    for i in range(10):
-                        time.sleep(0.2)
-                        txlist = [self.__motor_id, 0x03, 0x00, 0xE0, 0x00, 0x0A]
-                        rxdata = self.__deal_data.DealAllData(txlist, 6, True, l, 25)
-                        print("----", self.__motor_id,"--",rxdata)
-                        if(rxdata is not None and len(rxdata)==20):
-                            is_cur_port = True
-                        if(is_cur_port == True):
-                            # print(rxdata)
-                            print("找到设备",self.__motor_id,",端口名为", l)
-                            return l
+                    if(self.__deal_data.sensor_serial.is_serial_port_available(l)):
+                        for i in range(10):
+                            time.sleep(0.2)
+                            txlist = [self.__motor_id, 0x03, 0x00, 0xE0, 0x00, 0x0A]
+                            rxdata = self.__deal_data.DealAllData(txlist, 6, True, l, 25)
+                            print("----", self.__motor_id,"--",rxdata)
+                            if(rxdata is not None and len(rxdata)==20):
+                                is_cur_port = True
+                            if(is_cur_port == True):
+                                # print(rxdata)
+                                print("找到设备",self.__motor_id,",端口名为", l)
+                                return l
+                    else: print("无法打开串口")
+            print("未找到设备",self.__motor_id,)
+            exit(0)
     
     def ReadMotorData(self)->motor_msg:
         '''
@@ -286,7 +297,7 @@ class C_LiftingMotorCtrl():
     
     def SetTargetHeight(self, height:int):
         '''
-        设定目标高度值，循环限幅[0，400]
+        设定目标高度值，循环限幅
         '''
         if(height > self.__upLimitVal): self._target_height = self.__upLimitVal
         elif(height < self.__downLimitVal): self._target_height = self.__downLimitVal
@@ -322,8 +333,16 @@ class C_LiftingMotorCtrl():
         if not isinstance(motor_state, C_LiftingMotorCtrl.motor_msg):
             return False
         limit:bool
-        motor_speed = -abs(motor_speed)
-        limit = motor_state.downLimit
+        # motor_speed = -abs(motor_speed)
+        # limit = motor_state.downLimit
+        motor_speed = motor_speed
+        if(motor_speed < 0):
+            limit = motor_state.downLimit
+        elif(motor_speed > 0):
+            limit = motor_state.upLimit
+        else:
+            print("发送的初始化速度不应为0!!!")
+            return False
         if( not limit): 
             self.MotorMoveSpd(motor_speed)
             return False
@@ -336,7 +355,8 @@ class C_LiftingMotorCtrl():
             if isinstance(self.__motor_msgs, self.motor_msg):
                 self._target_pos = self.__motor_msgs.back_pos
                 self._target_height = self.__motor_msgs.back_lift_height
-            return True    
+            return True
+    
     def LiftTimeoutInit(self, timeout_flag:bool, motor_state:motor_msg):
         if not isinstance(motor_state, C_LiftingMotorCtrl.motor_msg):
             return False
@@ -367,10 +387,16 @@ class C_LiftingMotorCtrl():
         target_pos.append(((pause&0xFF)&0xFF))
         # crc计算拼接并发送
         txlist = [self.__motor_id, 0x010, 0x00, 0x50, 0x00, 0x02, 0x04] + target_pos
-        if(not self.stop_flag):
+        if(not self.GetStopFlag()):
             # self.MotorClearBug()
             rxdata =  self.__deal_data.DealAllData(txlist, 11, True, self.__port_name)
         pass
+
+    def SetStopFlag(self, flag:bool):
+        self.stop_flag = flag
+
+    def GetStopFlag(self):
+        return self.stop_flag
 
     def MotorStop(self, direction, motor_state:motor_msg, force:bool=False):
         '''
@@ -382,41 +408,44 @@ class C_LiftingMotorCtrl():
         txlist = [self.__motor_id, 0x06, 0x00, 0x4D, 0x00, 0x00]
         # 如果强制停止标志位为True，强制停止电机
         if(force):
-            self.stop_flag = True
+            self.SetStopFlag(True)
             self.MotorMoveSpd(0)
             rxdata =  self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
         else:
-            self.stop_flag = False
+            self.SetStopFlag(False)
             # 如果电机方向为正向(向上走)，同时下限位被触发，那么不停止电机
             if(direction==1):
                 if isinstance(motor_state, C_LiftingMotorCtrl.motor_msg):
                     if(motor_state.downLimit):
-                        self.stop_flag = False
+                        self.SetStopFlag(False)
                     elif((motor_state.upLimit)):
-                        self.stop_flag = True
+                        self.SetStopFlag(True)
                     
                     if(motor_state.back_lift_height >= self.__upLimitVal):
-                        self.stop_flag = True
-                    else: self.stop_flag = False
+                        self.SetStopFlag(True)
+                    else: 
+                        self.SetStopFlag(False)
             # 如果电机方向为反向(向下走)，同时上限位被触发，那么不停止电机
             elif(direction==-1 ):
                 if isinstance(motor_state, C_LiftingMotorCtrl.motor_msg):
                     if(motor_state.upLimit):
-                        self.stop_flag = False
+                        self.SetStopFlag(False)
                     elif((motor_state.downLimit)):
-                        self.stop_flag = True
+                        self.SetStopFlag(True)
                     if(motor_state.back_lift_height <= self.__downLimitVal):
-                        self.stop_flag = True
-                    else: self.stop_flag = False
+                        self.SetStopFlag(True)
+                    else: 
+                        self.SetStopFlag(False)
             # 如果电机方向为0，也就是发送的目标位置和当前位置相同，也不停止电机
             elif(direction==0):
                 if(motor_state.back_lift_height > self.__downLimitVal and motor_state.back_lift_height < self.__upLimitVal):
-                    self.stop_flag = False
-                else: self.stop_flag = True
+                    self.SetStopFlag(False)
+                else:
+                    self.SetStopFlag(True)
             else:
-                self.stop_flag = True
+                self.SetStopFlag(True)
             #print("------当前方向：",direction)
-        if(self.stop_flag):
+        if(self.GetStopFlag()):
             rxdata =  self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
             # print('停止电机运动')
             if isinstance(self.__motor_msgs, self.motor_msg):
@@ -426,7 +455,7 @@ class C_LiftingMotorCtrl():
     
     def MotorMoveSpd(self, motor_speed:int):
         '''
-        电机以指定速度移动
+        830abs电机以指定速度移动
         '''
         if(motor_speed > self.motorSpd): motor_speed = self.motorSpd
         elif(motor_speed < -self.motorSpd): motor_speed = -self.motorSpd
@@ -436,7 +465,7 @@ class C_LiftingMotorCtrl():
         speed.append(((motor_speed&0xFF00)>>8)&0xFF)
         speed.append(((motor_speed&0xFF)&0xFF))
         # print('令电机以',motor_speed,'rpm','运动')
-        txlist = [self.__motor_id, 0x06, 0x00, 0x10] + speed 
+        txlist = [self.__motor_id, 0x06, 0x00, 0x10] + speed
         rxdata =  self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
         if isinstance(self.__motor_msgs, self.motor_msg):
             if(abs(self.__motor_msgs.back_speed - motor_speed) < 1): 
@@ -504,7 +533,7 @@ class C_LiftingMotorCtrl():
         rxdata =  self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
         print("设定 ",self.__motor_id," 号电机启动和停止时间为: ",time, "* 65MS")
         pass
-    
+
     def MotorAutoStopStart(self):
         '''
         开启通讯中断自动停机
@@ -513,7 +542,7 @@ class C_LiftingMotorCtrl():
         txlist = [self.__motor_id, 0x06, 0x00, 0x1C, 0x00, 0x07]
         rxdata =  self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
         print("开启 ",self.__motor_id," 号电机通讯中断自动停机")
-    
+
     def MotorAutoStopClose(self):
         '''
         关闭通讯中断自动停机
@@ -541,7 +570,7 @@ class C_LiftingMotorCtrl():
 
     def MotorSetMaxSpd(self, max_spd):
         '''
-        设置电机最大速度
+        设置电机在位置模式下最大速度
         '''
         # 0x01, 0x10, 0x00, 0x50, 0x00, 0x02, 0x04, 0xFF, 0xFF, 0xD8, 0xF0 #-10000
         # 0x01, 0x10, 0x00, 0x50, 0x00, 0x02, 0x04, 0x00, 0x00, 0x27, 0x10 #+10000
@@ -558,8 +587,9 @@ class C_LiftingMotorCtrl():
         '''
         电机超过指定电流检测
         '''
-        if(self.__motor_msgs.back_current > self.__current_limit and self.__motor_msgs.back_speed == 0):
-            return True
+        if isinstance(self.__motor_msgs, self.motor_msg):
+            if(self.__motor_msgs.back_current > self.__current_limit and self.__motor_msgs.back_speed == 0):
+                return True
         return False
 
     def MotorSetSpdCtrl(self):
@@ -577,7 +607,7 @@ class C_LiftingMotorCtrl():
         txlist = [self.__motor_id, 0x06, 0x00, 0x02, 0x00, 0xD0]
         rxdata =  self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
         # print("设定 ",self.__motor_id," 号电机控制模式为位置控制模式")
-    
+
     def MotorClearBug(self):
         '''
         清除故障

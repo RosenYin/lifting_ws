@@ -175,7 +175,7 @@ class C_ROS_Server:
             self.motor_msgs.targetPos = self.ctrl.GetTargetPos()
             # 电机上限位
             self.motor_msgs.upLimit = (self.motor_states.upLimit)
-            # 电机下限位 
+            # 电机下限位
             self.motor_msgs.downLimit = (self.motor_states.downLimit)
         # 电机是否到达了目标位置，误差小于1认为到达了
         if(abs(self.target_height - self.back_height) < 1): 
@@ -237,8 +237,8 @@ class C_ROS_Server:
                     if(init_state_lock):
                         self.init_state = False
                         init_state_lock = False
-                    if(self.init_state): response = 1
-                    else: response = -1
+                    if(self.init_state): resp = 1
+                    else: resp = -1
                 # 位置模式
                 elif(req.mode == 0 and self.init_state):
                     self.target_height = self.ctrl.SetTargetHeight(req.val)
@@ -457,6 +457,7 @@ class C_ROS_Server:
             # ## 模式控制
             self.ModeCtrl()
             time.sleep(0.02)
+    
     def Main(self, state) -> None:
         '''
         主函数

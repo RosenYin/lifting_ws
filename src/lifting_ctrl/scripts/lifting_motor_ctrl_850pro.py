@@ -176,7 +176,7 @@ class C_LiftingMotorCtrl_850pro():
         self.MotorSetAbsoluteMode()
         # 清除故障
         self.MotorClearBug()
-        # 开启通讯中断自动停机
+        # 关闭通讯中断自动停机
         self.MotorAutoStopClose()
         # 设定电机启停时间
         self.MotorSetTime(self.__motor_time)
@@ -319,7 +319,7 @@ class C_LiftingMotorCtrl_850pro():
     
     def SetTargetHeight(self, height:int):
         '''
-        设定目标高度值，循环限幅[0，400]
+        设定目标高度值，循环限幅
         '''
         if(height > self.__upLimitVal): self._target_height = self.__upLimitVal
         elif(height < self.__downLimitVal): self._target_height = self.__downLimitVal
@@ -371,7 +371,7 @@ class C_LiftingMotorCtrl_850pro():
             for i in range(3):
                 self.MotorMoveSpd(0)
                 self.MotorClearCircle()
-                self.MotorClearPosZero()
+                # self.MotorClearPosZero()
             self.__motor_msgs = self.ReadMotorData()
             if isinstance(self.__motor_msgs, self.motor_msg):
                 self._target_pos = self.__motor_msgs.back_pos
@@ -537,7 +537,7 @@ class C_LiftingMotorCtrl_850pro():
         # 01 06 00 4C 00 00 48 1D #多圈清零
         txlist = [self.__motor_id, 0x06, 0x00, 0x4C, 0x00, 0x00]
         rxdata =  self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
-        self._target_height = self.__motor_msgs.back_pos
+        self._target_height = self.__motor_msgs.back_lift_height
         print(self.__motor_id, " 号电机进行多圈位置软件清零")
         if isinstance(self.__motor_msgs, self.motor_msg):
             if(round(self.__motor_msgs.back_pos / 10000) == 0):

@@ -27,6 +27,7 @@ class C_ROS_Server:
         # 电机控制类实例化 
         self.input_callback_time = time.time()
         self.ctrl = C_LiftingMotorCtrl(self.motor_id)
+        self.ctrl.MotorConfigInit()
         lift_port = self.ctrl.GetLiftPortName()
         self.add_to_param_list('/liftPort',lift_port)
         # 设置阻塞式回调函数超时时间，默认为300s，即5分钟
@@ -65,16 +66,15 @@ class C_ROS_Server:
             self.back_height = self.motor_states.back_lift_height
         self.motor_msgs = LiftMotorMsg()
         self.motor_pub = rospy.Publisher('LiftMotorStatePub', LiftMotorMsg, queue_size=1)
-        if(self.callBackMode == 1):
-            self.motor_srv = rospy.Service('LiftingMotorService', LiftMotorSrv, self.SververCallbackImmediately)
-        elif(self.callBackMode == 0):
-            self.motor_srv = rospy.Service('LiftingMotorService', LiftMotorSrv, self.SververCallbackBlock)
+        self.motor_srv = rospy.Service('LiftingMotorService', LiftMotorSrv, self.SververCallbackBlock)
         self.first_up_flag = False
         self.first_down_flag = False
         self.previous_dir = 0
         self.command_send = 0
         self.offset = 0
         self.init_state:bool = False
+        if(self.mode != 1):
+            self.init_state = True
         self.overload_flag:bool = False
         self.callLock = self.last_callLock = True
         self.timeoutFlag:bool = False
@@ -277,11 +277,15 @@ class C_ROS_Server:
         self.mode = req.mode
         resp = -1
         self.timeoutFlag = False
+        init_state_lock = True
         if(self.callLock == self.last_callLock):
             while resp == -1:
                 self.callLock = not self.last_callLock
                 # 初始化模式
                 if(req.mode == 1):
+                    if(init_state_lock):
+                        self.init_state = False
+                        init_state_lock = False
                     if(self.init_state): resp = 1
                     else: resp = -1
                 # 位置模式
@@ -398,22 +402,23 @@ class C_ROS_Server:
         '''
         电机模式控制
         '''
-        if(self.timeoutFlag):
-            if(self.init_state == False):
-                rospy.loginfo(self.motor_id," 号电机初始化超时,直接将当前位置作为初始化位置")
-                self.init_state = True
-                self.ctrl.LiftTimeoutInit(True, self.motor_states)
-            self.mode == -2
+        # if(self.timeoutFlag):
+        #     if(self.init_state == False):
+        #         rospy.loginfo(self.motor_id," 号电机初始化超时,直接将当前位置作为初始化位置")
+        #         self.init_state = True
+        #         self.ctrl.LiftTimeoutInit(True, self.motor_states)
+        #     self.mode == -2
         # 判断初始化标志位，进行电机初始化
         # if(not self.init_state): self.mode = 1
         # print("current_mode: ",self.mode)
         
         if(self.mode == 1 and self.fps_error <= 3):
             # print("初始化ing...速度为：",self.initSpd)
+            self.ctrl.SetStopFlag(False)
             if(not self.overload_flag):
                 if(self.print_flag_init):
                     rospy.loginfo("开始下限位初始化...")
-                self.init_state = self.ctrl.LiftLimitInit(self.initSpd, self.motor_states)
+            self.init_state = self.ctrl.LiftLimitInit(self.initSpd, self.motor_states)
             # print(self.motor_msgs.overLoad, self.motor_msgs.backCurrent, self.init_state)
             if(self.init_state): 
                 self.mode = 0xF1
@@ -423,11 +428,18 @@ class C_ROS_Server:
             else:
                 if(self.print_flag_init):
                     rospy.logwarn("未完成初始化...")
-                if(self.motor_msgs.overLoad or self.motor_msgs.backCurrent > 11):
+                if(self.motor_msgs.overLoad or self.motor_msgs.backCurrent > self.ctrl.GetOverflowILimit()):
                     self.overload_flag = True
                     rospy.logwarn("检测到电机过载，可能是电机卡住或者下限位失效，在当前位置进行初始化")
                     self.init_state = True
                     self.ctrl.LiftTimeoutInit(True, self.motor_states)
+                    self.mode = 0xF2
+                if(self.timeoutFlag):
+                    print(self.motor_id," 号电机初始化超时,直接将当前位置作为初始化位置")
+                    # rclpy.node.get_logger().info(self.motor_id," 号电机初始化超时,直接将当前位置作为初始化位置")
+                    self.init_state = True
+                    self.ctrl.LiftTimeoutInit(True, self.motor_states)
+                    self.mode = 0xF2
             self.print_flag_init = False
                     # print("--------",self.motor_msgs.overLoad, self.motor_msgs.backCurrent, self.init_state)
         if(self.mode == 0xF1):
@@ -436,6 +448,9 @@ class C_ROS_Server:
                 # 运动电机
                 self.ctrl.LiftMovePos(self.target_height)
             # self.mode = 0xF2
+        if(self.mode == 0xF2):
+            self.ctrl.LiftMoveSpd(0)
+            self.ctrl.MotorStop(self.JudgeMotorDirectionWithSpeed(), self.motor_states, force=False)
         if(self.mode == -2):# -2 指令用来紧急停止电机
             self.target_speed = 0
             self.ctrl.LiftMoveSpd(self.target_speed)
@@ -450,16 +465,16 @@ class C_ROS_Server:
             self.ctrl.MotorStop(self.JudgeMotorDirectionWithSpeed(), self.motor_states, force=False)
         if(self.mode == -5 and self.fps_error <= 1):# -4指令用来运动i电机指定速度
             self.ctrl.MotorSetMaxSpd(self.target_speed)
-        if(self.mode == 0 and self.fps_error <= 1):
-            self.ctrl.MotorStop(self.JudgeMotorDirection(), self.motor_states, force=False)
-            # 运动电机
-            self.ctrl.LiftMovePos(self.target_height)
         if(self.mode == -6 and self.fps_error <= 1):# -4指令用来运动i电机指定速度
             self.ctrl.MotorClearPosZero()
         if(self.mode == -7 and self.fps_error <= 1):# -7指令用来运动i电机指定速度
             self.ctrl.SetTargetHeight(self.back_height)
             self.ctrl.MotorMoveSpd(self.target_speed)
             self.ctrl.MotorStop(self.JudgeMotorDirectionWithSpeed(), self.motor_states, force=False)
+        if(self.mode == 0 and self.fps_error <= 1):
+            self.ctrl.MotorStop(self.JudgeMotorDirection(), self.motor_states, force=False)
+            # 运动电机
+            self.ctrl.LiftMovePos(self.target_height)
         # 过流保护
         if(self.ctrl.OverflowIProtect()):
             self.ctrl.MotorStop(self.JudgeMotorDirection(), self.motor_states, force=True)
