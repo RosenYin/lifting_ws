@@ -47,12 +47,13 @@ class C_SerialEncapsulation():
             # 串口名，默认'/dev/ttyUSB0'
             if(port_name is None):
                 if('portName' in json_data.keys()):
-                    self.serial_port.port=f'{json_data["portName"]}'
-                else: self.serial_port.port = '/dev/ttyUSB0'
+                    self.port_name = f'{json_data["portName"]}'
+                else: self.port_name = '/dev/ttyUSB0'
             else: 
                 if not isinstance(port_name, str):
                     raise("串口名不正确，应为字符串类型!!")
-                self.serial_port.port = port_name
+                self.port_name = port_name
+            self.serial_port.port=self.port_name
             
             # 波特率，默认9600
             if('baudRate' in json_data.keys()):
@@ -76,7 +77,16 @@ class C_SerialEncapsulation():
             else: self.serial_port.timeout = 0.05
             # 返回串口类型
             return self.serial_port
-        
+    
+    def is_serial_port_available(self, port):
+        with self.lock:
+            try:
+                ser = serial.Serial(port)
+                ser.close()
+                return True
+            except (serial.SerialException, OSError):
+                return False
+
     # 打开端口
     def PortOpen(self):
         '''
