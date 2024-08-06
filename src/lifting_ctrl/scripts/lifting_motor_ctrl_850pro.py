@@ -118,6 +118,7 @@ class C_LiftingMotorCtrl_850pro():
         super().__init__()
         self.__motor_id = motor_id
         self.__deal_data = C_DealDataBase(motor_id)
+        self.mode_switch_flag = "spd"
         # 设定电机所在的端口
         if('portName' in self.GetMotorJsonConfig().keys()):
             self.__port_name=self.GetMotorJsonConfig()["portName"]
@@ -400,7 +401,9 @@ class C_LiftingMotorCtrl_850pro():
         '''
         运动电机
         '''
-        self.MotorSetPosCtrl()
+        if(self.mode_switch_flag != "pos"):
+            self.MotorSetPosCtrl()
+            self.mode_switch_flag = "pos"
         # 0x01, 0x10, 0x00, 0x50, 0x00, 0x02, 0x04, 0xFF, 0xFF, 0xD8, 0xF0 #-10000
         # 0x01, 0x10, 0x00, 0x50, 0x00, 0x02, 0x04, 0x00, 0x00, 0x27, 0x10 #+10000
         target_pos = []
@@ -481,7 +484,9 @@ class C_LiftingMotorCtrl_850pro():
         '''
         850pro速度发送:速度指令＝写入值/ 8192 *3000RPM
         '''
-        self.MotorSetSpdCtrl()
+        if(self.mode_switch_flag != "spd"):
+            self.MotorSetSpdCtrl()
+            self.mode_switch_flag = "spd"
         if(motor_speed > self.motorSpd): motor_speed = self.motorSpd
         elif(motor_speed < -self.motorSpd): motor_speed = -self.motorSpd
         # print(motor_speed)
