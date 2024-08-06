@@ -78,7 +78,7 @@ rosservice call /LiftingMotorService val: 0 mode: 0
 
    导程=8, 减速比= 1:10
 
-   `reductionRatio`应该设定为:10000 \* (1/8) \* (10) = 2000
+   `reductionRatio`应该设定为:10000 \* (1/8) \* (10) = 12500
 
 2. 需要确定初始化的方向:
 
