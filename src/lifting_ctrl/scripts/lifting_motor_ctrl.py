@@ -65,7 +65,7 @@ class C_DealDataBase():
             # 串口接收
             rxdata = self.sensor_serial.PortReadContinuousData(auto_open=False, data_len=data_length)
             # rxdata = self.sensor_serial.PortReadSizeData(auto_open=False)
-            self.sensor_serial.PortClose()
+            # self.sensor_serial.PortClose()
         return rxdata
     def DealAllData(self, tx_list:list, crc_data_len:int, crc_flag:bool=True, port_name=None, rxdata_len:int=-2, wait_time:int = 0):
         '''

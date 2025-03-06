@@ -64,8 +64,9 @@ class C_DealDataBase():
             # print(txdata)
             # 串口接收
             rxdata = self.sensor_serial.PortReadContinuousData(auto_open=False, data_len=data_length)
+            # rxdata = self.sensor_serial.PortReadAllData(auto_open=False)
             # rxdata = self.sensor_serial.PortReadSizeData(auto_open=False)
-            self.sensor_serial.PortClose()
+            # self.sensor_serial.PortClose()
         return rxdata
     def DealAllData(self, tx_list:list, crc_data_len:int, crc_flag:bool=True, port_name=None, rxdata_len:int=-2, wait_time:int = 0):
         '''
@@ -76,10 +77,13 @@ class C_DealDataBase():
         # print("------------")
         # print("1111=======22222",txdata)
         # 调用类内收发数据函数
+        # b = time.time()
         if(port_name == None):
             rxdata = self.__ReceiveAndSendSensorData(txdata, rxdata_len, wait_time)
         else: rxdata = self.__ReceiveAndSendSensorData(txdata, port_name, rxdata_len, wait_time)
-        # print("-----",rxdata)
+        # print("2==========",time.time() - b)
+        # if(rxdata[1] == 6):
+        #     print("-----",rxdata)
         rxlist = rxdata
         length = len(rxlist)
         # 如果接收到的列表不为空列表
@@ -89,7 +93,8 @@ class C_DealDataBase():
             crc16 = C_CRC().CrcSplit(16, "int", crc16)
             # 将计算的与接收到的进行校验
             if(crc16[1] == rxlist[-1] and crc16[0] == rxlist[-2]):
-                # print(rxlist)
+                # if(rxdata[1] == 6):
+                #     print("++++++++++++++",rxlist)
                 # 问讯应答帧
                 if(rxlist[1] == 0x03):
                     # 第3位为数据长度位
@@ -261,28 +266,36 @@ class C_LiftingMotorCtrl_850pro():
         # 赋值控制模式始终为1
         self.motor_list = [0,1]
         txlist = [self.__motor_id, 0x03, 0x00, 0xE1, 0x00, 0x02]
+        # a = time.time()
         tmp = self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
-        time.sleep(0.01)
+        # print("1-----------------",time.time() - a)
+        # time.sleep(0.01)
         if(tmp is not None):
             self.motor_list = self.motor_list + tmp
             txlist = [self.__motor_id, 0x03, 0x00, 0xE3, 0x00, 0x02]
+            # b = time.time()
             tmp = self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
-            time.sleep(0.01)
+            # print("2-----------------",time.time() - b)
+            # time.sleep(0.01)
             if(tmp is not None):
                 self.motor_list =  self.motor_list + tmp
                 # 将定位完成位始终赋值为1
                 self.motor_list =  self.motor_list + [0, 1]
                 txlist = [self.__motor_id, 0x03, 0x00, 0xE6, 0x00, 0x02]
+                # b = time.time()
                 tmp = self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
-                time.sleep(0.01)
+                # print("3-----------------",time.time() - b)
+                # time.sleep(0.01)
                 if(tmp is not None):
                     self.motor_list =  self.motor_list + tmp
                     txlist = [self.__motor_id, 0x03, 0x00, 0xE8, 0x00, 0x02]
+                    # b = time.time()
                     tmp = self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
-                    time.sleep(0.01)
+                    # print("4-----------------",time.time() - b)
+                    # time.sleep(0.01)
                     if(tmp is not None):
                         self.motor_list =  self.motor_list + tmp
-        # self.motor_list = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        # print("5-----------------",time.time() - a)
         self.limit_list = self.ReadMotorLimitData()
         # self.limit_list = [False,False]
         # print("+++++",self.motor_list)
@@ -487,19 +500,22 @@ class C_LiftingMotorCtrl_850pro():
         if(self.mode_switch_flag != "spd"):
             self.MotorSetSpdCtrl()
             self.mode_switch_flag = "spd"
+            print("========Switch to SPD Mode========")
         if(motor_speed > self.motorSpd): motor_speed = self.motorSpd
         elif(motor_speed < -self.motorSpd): motor_speed = -self.motorSpd
         # print(motor_speed)
         # 停止标志位为true，速度为0
         if(self.stop_flag): motor_speed = 0
         # print(self.stop_flag)
+        # print(motor_speed)
         speed = []
         speed.append(((motor_speed&0xFF00)>>8)&0xFF)
-        speed.append(((motor_speed&0xFF)&0xFF))
+        speed.append(((motor_speed&0x00FF)&0xFF))
         # print('令电机以',motor_speed,'rpm','运动')
         txlist = [self.__motor_id, 0x06, 0x00, 0x06] + speed 
         # print(txlist)
         rxdata =  self.__deal_data.DealAllData(txlist, 6, True, self.__port_name)
+        # print(rxdata)
         if isinstance(self.__motor_msgs, self.motor_msg):
             if(abs(self.__motor_msgs.back_speed - motor_speed) < 1): 
                 return True

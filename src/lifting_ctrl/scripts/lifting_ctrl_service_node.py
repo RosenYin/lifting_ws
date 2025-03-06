@@ -66,7 +66,10 @@ class C_ROS_Server:
             self.back_height = self.motor_states.back_lift_height
         self.motor_msgs = LiftMotorMsg()
         self.motor_pub = rospy.Publisher('LiftMotorStatePub', LiftMotorMsg, queue_size=1)
-        self.motor_srv = rospy.Service('LiftingMotorService', LiftMotorSrv, self.SververCallbackBlock)
+        if(self.callBackMode == 0):
+            self.motor_srv = rospy.Service('LiftingMotorService', LiftMotorSrv, self.SververCallbackBlock)
+        elif(self.callBackMode == 1):
+            self.motor_srv = rospy.Service('LiftingMotorService', LiftMotorSrv, self.SververCallbackImmediately)
         self.first_up_flag = False
         self.first_down_flag = False
         self.previous_dir = 0
@@ -181,7 +184,7 @@ class C_ROS_Server:
         if(abs(self.target_height - self.back_height) < 1): 
             self.motor_msgs.reachTargetPos = True
         else: self.motor_msgs.reachTargetPos = False
-
+        self.motor_msgs.stopFlag = self.ctrl.GetStopFlag()
         self.motor_msgs.fpsError = self.fps_error
             # 发布
         try:
@@ -220,50 +223,124 @@ class C_ROS_Server:
     # 回调函数
     def SververCallbackImmediately(self,req):
         '''
-        服务端回调函数,立刻反馈数值，不等待电机到达位置就反馈
+        830ABS 服务端回调函数,立刻反馈数值，不等待电机到达位置就反馈
         '''
+        self.input_callback_time = time.time()
         self.command_send = 1
-        self.mode = req.mode
         
-        # 初始化模式
-        if(req.mode == 1):
-            if(self.init_state): resp = 1
-            else: resp = -1
-        # 位置模式
-        elif(req.mode == 0 and self.init_state):
-            self.target_height = self.ctrl.SetTargetHeight(req.val)
-            rospy.loginfo("target height: %d", self.target_height)
-            # 电机是否到达了目标位置，误差小于1认为到达了，反馈1为到达，反馈-1为未到达
-            if(abs(self.target_height - self.back_height) < 1): 
-                resp = 1
-            else: resp = -1
-        # 急停
-        elif(req.mode == -2 and self.init_state):
-            if isinstance(self.motor_states, C_LiftingMotorCtrl.motor_msg):
-                if(self.motor_states.back_speed == 0):
+        self.mode = req.mode
+        resp = -1
+        self.timeoutFlag = False
+        init_state_lock = True
+        if(self.callLock == self.last_callLock):
+            self.callLock = not self.last_callLock
+            # 初始化模式
+            if(req.mode == 1):
+                if(init_state_lock):
+                    self.init_state = False
+                    init_state_lock = False
+                if(self.init_state): resp = 1
+                else: resp = -1
+            # 位置模式
+            elif(req.mode == 0 and self.init_state):
+                self.target_height = self.ctrl.SetTargetHeight(req.val)
+                rospy.loginfo("target height: %d", self.target_height)
+                # 电机是否到达了目标位置，误差小于1认为到达了，反馈1为到达，反馈-1为未到达
+                if(abs(self.target_height - self.back_height) < 2): 
                     resp = 1
-            else: resp = -1
-        # 初始化，用来另当前位置等于目标位置，如果当前位置-目标位置值小于2,认为数值初始化成功
-        elif(req.mode == -3):
-            if(abs(self.target_height - self.back_height) < 2 and self.fps_error == 0):
+                else: resp = -1
+            # 急停
+            elif(req.mode == -2 and self.init_state):
+                if isinstance(self.motor_states, C_LiftingMotorCtrl.motor_msg):
+                    if(self.motor_states.back_speed == 0):
+                        resp = 1
+                else: resp = -1
+            # -3 指令用来初始化电机，并清空错误帧率
+            elif(req.mode == -3):
                 resp = 1
-            else: resp = -1
-        # 恒定速度
-        elif(req.mode == -4 and self.init_state):
-            self.target_speed = req.val
-            rospy.loginfo("----------操作电机 %d 速度为%d",self.motor_id, self.target_speed)
-            if(self.target_speed > abs(self.liftTargetSpd)): self.target_speed=abs(self.liftTargetSpd)
-            if(self.target_speed < -abs(self.liftTargetSpd)): self.target_speed=-abs(self.liftTargetSpd)
-            if isinstance(self.motor_states, C_LiftingMotorCtrl.motor_msg):
-                if(abs(round((self.motor_states.back_speed*10000) / (self.ctrl.reductionRatio * 60)) - self.target_speed)<5):
+                # else: resp = -1
+            # 恒定速度
+            elif(req.mode == -4 and self.init_state):
+                # rospy.loginfo("the max speed is: ",self.liftTargetSpd)
+                self.ctrl.SetTargetHeight(self.back_height)
+                self.target_speed = req.val
+                rospy.loginfo("----------操作电机 %d 目标速度为%d",self.motor_id, self.target_speed)
+                if(self.target_speed > abs(self.liftTargetSpd)): self.target_speed=abs(self.liftTargetSpd)
+                if(self.target_speed < -abs(self.liftTargetSpd)): self.target_speed=-abs(self.liftTargetSpd)
+                rospy.loginfo("----------操作电机 %d 最终发送速度为%d",self.motor_id, self.target_speed)
+                if isinstance(self.motor_states, C_LiftingMotorCtrl.motor_msg):
+                    rospy.loginfo(self.motor_states.back_speed)
+                    if(abs(round((self.motor_states.back_speed*10000) / (self.ctrl.reductionRatio * 60)) - self.target_speed)<20):
+                        resp = 1
+                else: resp = -1
+            elif(req.mode == -5 and self.init_state):
+                self.target_speed = req.val
+                if(self.target_speed > self.liftTargetSpd): self.target_speed=self.liftTargetSpd
+                if(self.target_speed < -self.liftTargetSpd): self.target_speed=-self.liftTargetSpd
+                self.target_speed = round((self.target_speed * self.ctrl.reductionRatio * 60)/10000)
+                self.ctrl.MotorSetMaxSpd(self.target_speed)
+                resp = 1
+            elif(req.mode == -6):
+                if(self.target_speed ==0 ):
+                    self.ctrl.MotorClearPosZero()
+                else:
+                    resp = -15
+                if(abs(self.motor_states.back_pos) <= 1):
                     resp = 1
-            else: resp = -1
-        else:
-            resp = 0
-        # 如果错误帧率达到1以上
-        if(self.fps_error > 3):
-            resp = -9
-        rospy.loginfo("服务端的resquest为%s", self.mode)
+                else:
+                    resp = -1
+            # 恒定速度
+            elif(req.mode == -7 and self.init_state):
+                # rospy.loginfo("the max speed is: ",self.liftTargetSpd)
+                self.ctrl.SetTargetHeight(self.back_height)
+                self.target_speed = req.val
+                max_spd = self.ctrl.GetMotorMaxSpd()
+                rospy.loginfo("----------操作电机 %d 目标速度为%d",self.motor_id, self.target_speed)
+                if(self.target_speed > max_spd): self.target_speed=max_spd
+                if(self.target_speed < -max_spd): self.target_speed=-max_spd
+                rospy.loginfo("----------操作电机 %d 最终发送速度为%d",self.motor_id, self.target_speed)
+                if isinstance(self.motor_states, C_LiftingMotorCtrl.motor_msg):
+                    rospy.loginfo(self.motor_states.back_speed)
+                    if(abs(self.motor_states.back_speed - self.target_speed)<20):
+                        resp = 1
+                else: resp = -1
+            else:
+                resp = 0
+                if(not self.init_state):
+                    resp = -14
+            
+            if(resp == -1):
+                if(self.init_state == True):
+                    if isinstance(self.motor_states, C_LiftingMotorCtrl.motor_msg):
+                        if(self.motor_states.upLimit):
+                            if(self.mode == 0 and self.JudgeMotorDirection()==-1):
+                                resp = -1
+                            elif(self.mode == -4 and self.JudgeMotorDirectionWithSpeed()==-1):
+                                resp = -1
+                            else: resp = -2
+                        elif(self.motor_states.downLimit):
+                            if(self.mode == 0 and self.JudgeMotorDirection()==1):
+                                resp = -1
+                            elif(self.mode == -4 and self.JudgeMotorDirectionWithSpeed()==1):
+                                resp = -1
+                            else: resp = 2
+                else: 
+                    resp = -1
+            # 如果错误帧率达到4以上
+            if(self.fps_error > 4):
+                resp = -9
+            
+            if(time.time()  - self.input_callback_time > self.response_timeout):
+                self.mode == -2
+                self.timeoutFlag = True 
+                rospy.logerr("lifting_motor timeout!!!!")
+                resp = -12
+                if(not self.init_state):
+                    resp = -13
+
+        self.last_callLock = self.callLock
+        rospy.loginfo("resquest的mode为%s", self.mode)
+        rospy.loginfo("resquest的val为%d", req.val)
         rospy.loginfo("服务端的应答为%s", resp)
         return LiftMotorSrvResponse(resp)
 
@@ -417,7 +494,7 @@ class C_ROS_Server:
             self.ctrl.SetStopFlag(False)
             if(not self.overload_flag):
                 if(self.print_flag_init):
-                    rospy.loginfo("开始下限位初始化...")
+                    rospy.loginfo("开始限位初始化...")
             self.init_state = self.ctrl.LiftLimitInit(self.initSpd, self.motor_states)
             # print(self.motor_msgs.overLoad, self.motor_msgs.backCurrent, self.init_state)
             if(self.init_state): 

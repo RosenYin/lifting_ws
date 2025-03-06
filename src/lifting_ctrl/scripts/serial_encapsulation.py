@@ -71,10 +71,10 @@ class C_SerialEncapsulation():
             if('parity' in json_data.keys()):
                 self.serial_port.parity=json_data["parity"]
             else: self.serial_port.parity = "N"#奇偶校验位
-            # 超时设置，默认 0.05 ，在调用readall、read_line等函数时需要,否则会卡死
+            # 超时设置，默认 0.008 ，在调用readall、read_line等函数时需要,否则会卡死
             if('timeout' in json_data.keys()):
                 self.serial_port.timeout=json_data["timeout"]
-            else: self.serial_port.timeout = 0.05
+            else: self.serial_port.timeout = 0.008
             # 返回串口类型
             return self.serial_port
     
@@ -202,12 +202,13 @@ class C_SerialEncapsulation():
                         pass
             return rxdata
     
-    # 调用readall方法一次性读取所有数据,默认超时时间0.05s(自设定的)
+    # 调用readall方法一次性读取所有数据,默认超时时间0.008s(自设定的)
     def PortReadAllData(self, auto_open:bool=True):
         '''
-        调用readall方法一次性读取所有数据,默认超时时间0.05s(自设定的)
+        调用readall方法一次性读取所有数据,默认超时时间0.008s(自设定的)
         '''
         with self.lock:  # 加锁
+            rx = []
             if(auto_open):
                 self.PortParamConfig()
                 self.PortOpen()
@@ -216,16 +217,18 @@ class C_SerialEncapsulation():
                     rxdata = self.serial_port.readall()
                     # print(rxdata)
                     # print('读取到数据')
-                    return rxdata
+                    for rxbytes in rxdata:
+                        rx.append(rxbytes)
                 except:
                     pass
             else:
                 # print("串口未打开，无法读取")
                 pass
-    # 调用read方法，读取指定长度数据，默认长度为1，默认超时时间0.05s(自设定的)
+            return rx
+    # 调用read方法，读取指定长度数据，默认长度为1，默认超时时间0.008s(自设定的)
     def PortReadSizeData(self, data_size:int=1, auto_open:bool=True):
         '''
-        调用read方法，读取指定长度数据，默认长度为1，默认超时时间0.05s(自设定的)
+        调用read方法，读取指定长度数据，默认长度为1，默认超时时间0.008s(自设定的)
         '''
         with self.lock:  # 加锁
             if(auto_open):

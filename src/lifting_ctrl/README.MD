@@ -8,7 +8,9 @@ lifting_ctrl_service_node.py 为开启服务控制电机节点`lifting_ctrl_serv
 
 lifting_ctrl_service_node_850pro.py 为开启服务控制电机节点`lifting_ctrl_850pro_server_node`，服务名为`/LiftingMotorService`
 
-启动升降柱控制节点
+2025-3-6 之前很多客户发现电机只能初始化一次，之后就无效了，是因为速度控制下的限位被驱动器限制了，需要使用电机win上位机，然后设定can通讯组号为1，取消速度模式下限位，就可以恢复正常
+
+## 启动升降柱控制节点
 注意，_motor_id参数必需，参数为1,2,3,4中一个，跟升降柱的电机驱动器ID相关，无默认值
 
 ```bash

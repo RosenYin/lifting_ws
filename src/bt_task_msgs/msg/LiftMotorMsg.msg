@@ -26,4 +26,5 @@ bool upLimit
 bool downLimit
 
 bool reachTargetPos
+bool stopFlag
 int64 fpsError
