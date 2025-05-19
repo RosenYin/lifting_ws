@@ -20,17 +20,24 @@ Time: 2024.6.24
    因为假设初始上电位置超过了json中设定的限位范围[downLimitVal,upLimitVal],`initMode`参数设定为0会导致刚上电数值超限,会向反方向旋转,这个只在`initMode`参数设定为0时出现,
    如果`initMode`参数设定为1,则会上电初始化,不会出现这个问题
 
-## pip packages
+## Dependencies
 
 ```bash
 cd lifting_ws
 pip3 install -r ./requirement.txt
+sudo apt install ros-noetic-serial
 ```
 
 ## USB Permission
 
 ```bash
 sudo cp ttyUSB_permission.rules /etc/udev/rules.d/
+```
+
+```shell
+sudo service udev reload
+sudo service udev restart
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 ## compile
@@ -95,7 +102,7 @@ rosservice call /LiftingMotorService val: 0 mode: 0
 6. `initMode`用来确定程序刚启动时候的模式,设定1为初始化模式,如果不需要初始化,请设置为0
 7. `portName`用来设定电机信号线所在的usb端口,这个参数如果不存在,程序会自动寻找`ttyUSB*`
 8. `motorStallCurrent`用来设定电机保护电流，根据实际情况去设定,负载比较大的时候酌情加大
-9.  `motorTime`用来设定电机加减速时间,在位置模式下,也就是梯形加减速模型
+9. `motorTime`用来设定电机加减速时间,在位置模式下,也就是梯形加减速模型
 
    如果是830ABS,则只用来设定位置模式下加减速时间
 
@@ -105,6 +112,9 @@ rosservice call /LiftingMotorService val: 0 mode: 0
 {
    "portName": "/dev/lifter_1",//串口名字,如果不写,程序会自动寻找
    "initMode":0,//开始上电时的模式,0为位置控制,1为上电开始初始化,建议测试好功能后,将电机装到模组上面并测试好下限位正常再去改为1
+   "baudRate": 38400,//串口波特率
+   "timeout":0.02,//串口读取一帧数据的超时时间，数值越小读取的数据帧率越快，但是越可能出现丢帧，经测试，830abs为0.02,850pro为0.008最宜
+   "dataFormat":"hex",//使用16进制格式化数据
    "reductionRatio":20000,//执行器末端执行1mm，电机运行多少脉冲(1圈10000脉冲)，单位脉冲数
    "responseTimeout":70,//应答超时时间，单位s
    "motorSpd":800,//电机最大速度设定，单位rpm
@@ -112,6 +122,7 @@ rosservice call /LiftingMotorService val: 0 mode: 0
    //(830ABS):单位 1 为 65ms，假设设定为10,则加减速时间为650ms
    //(850pro):单位 1 为 1ms，假设设定为10,则加减速时间为10ms,这个同时还会设置加减速时间
    "motorTime":0,
+   "callBackMode":1,//0为阻塞式应答，1为非阻塞应答
    "upLimitVal":305,//电机正方向运行最大值，单位mm
    "downLimitVal":0,//电机负方向运行最小值，单位mm
    "initSpd":-800,//初始化时电机运行速度，单位rpm

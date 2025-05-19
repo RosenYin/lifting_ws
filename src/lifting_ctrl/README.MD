@@ -8,9 +8,10 @@ lifting_ctrl_service_node.py 为开启服务控制电机节点`lifting_ctrl_serv
 
 lifting_ctrl_service_node_850pro.py 为开启服务控制电机节点`lifting_ctrl_850pro_server_node`，服务名为`/LiftingMotorService`
 
-2025-3-6 之前很多客户发现电机只能初始化一次，之后就无效了，是因为速度控制下的限位被驱动器限制了，需要使用电机win上位机，然后设定can通讯组号为1，取消速度模式下限位，就可以恢复正常
+2025-3-6：很多客户发现电机只能初始化一次，之后就无效了，是因为速度控制下的限位被驱动器限制了，需要使用电机win上位机，然后设定can通讯组号为1，取消速度模式下限位，就可以恢复正常
 
 ## 启动升降柱控制节点
+
 注意，_motor_id参数必需，参数为1,2,3,4中一个，跟升降柱的电机驱动器ID相关，无默认值
 
 ```bash
@@ -27,15 +28,19 @@ rosrun lifting_ctrl lifting_ctrl_service_node_850pro.py _motor_id:=1 __ns:=lifte
 
 也有自带的launch
 
-这是使用默认参数,ns=lifter_1,motor_id=1
+使用默认参数,ns=lifter_1,motor_id=1
 
 ```bash
+# 830abs
 roslaunch lifting_ctrl start_motor.launch
+# 850pro
+roslaunch lifting_ctrl start_850pro_motor.launch
 ```
 
 这是使用自定义参数
 
 ```bash
+roslaunch lifting_ctrl start_motor.launch motor_id_:=1 lifter_ns:=lifter_1
 roslaunch lifting_ctrl start_850pro_motor.launch motor_id_:=1 lifter_ns:=lifter_1
 ```
 
@@ -46,18 +51,18 @@ roslaunch lifting_ctrl start_850pro_motor.launch motor_id_:=1 lifter_ns:=lifter_
     "portName": "/dev/lifter_1",//串口名字
     "initMode":0,//开始上电时的模式,0为位置控制,1为上电开始初始化,建议测试好功能后,将电机装到模组上面并测试好下限位正常再去改为1
     "baudRate": 38400 ,//串口波特率
+   "timeout":0.02,//串口读取一帧数据的超时时间，数值越小读取的数据帧率越快，但是越可能出现丢帧，经测试，830abs为0.02,850pro为0.008最宜
     "dataFormat":"hex",//是否16进制转换
-    "reductionRatio":20000,//执行器末端执行1mm，电机运行多少脉冲(1圈10000脉冲)，单位脉冲数
-    "posOffset": 0,//位置偏移量(暂时不用)，，单位脉冲
-    "responseTimeout":70,//应答超时时间，单位s
-    "motorSpd":800,//电机最大速度设定，单位rpm
+    "reductionRatio":12500,//执行器末端执行1mm，电机运行多少脉冲(1圈10000脉冲)，单位脉冲数
+    "responseTimeout":60,//应答超时时间，单位s
+    "motorSpd":2000,//电机最大速度设定，单位rpm
     "motorTime":0,//电机加减速时间(梯形曲线)，单位 1 为 65ms，假设设定为10,则加减速时间为650ms
-    "callBackMode":0,//回调函数模式，0为阻塞应答，1为立刻应答，其它值无效
-    "upLimitVal":305,//电机正方向运行最大值，单位mm
-    "downLimitVal":0,//电机负方向运行最小值，单位mm
+    "callBackMode":1,//回调函数模式，0为阻塞应答，1为立刻应答，其它值无效
+    "upLimitVal":600,//电机正方向运行最大值，单位mm
+    "downLimitVal":5,//电机负方向运行最小值，单位mm
     "initSpd":-800,//初始化时电机运行速度，单位rpm
-    "initPos":150,//初始化后执行器要到达的位置，单位mm
-    "motorStallCurrent":11,//电机堵转电流限幅,单位A
+    "initPos":0,//初始化后执行器要到达的位置，单位mm
+    "motorStallCurrent":15//电机堵转电流限幅,单位A
 }
 ```
 
@@ -97,7 +102,7 @@ int64 state
 
 ### 回调函数的选择
 
-- SververCallbackImmediately 为立刻应答，即call一次服务端立刻response(后面调试都用的阻塞式回调了，立刻应答没有维护，建议不要改为立刻应答);
+- SververCallbackImmediately 为立刻应答，即call一次服务端立刻response;
 - SververCallbackBlock 为阻塞应答，即call一次服务端，直到完成发送的指令才会response。
 
 ### res反馈值的含义
@@ -122,6 +127,7 @@ int64 state
 这个node文件还会pub topic类型为`/LiftMotorStatePub`的消息，具体如下
 
 ```C
+Header header       //数据帧header
 uint8 motorId       //电机id
 bool initState      //初始化状态
 
@@ -148,6 +154,8 @@ int64 targetHeight  //目标高度，这个是你给service发送height的值(�
 int64 targetPos     //目标位置，这个是目标高度经过解算后得到的目标位置值,mm
 bool upLimit        //上限位,0/1
 bool downLimit      //下限位,0/1
+int64 upLimitHeight //从json中读取到的上限位数值
+int64 downLimitHeight//从json中读取到的下限位数值
 
 bool reachTargetPos //是否到达目标位置，这个值是用反馈高度和目标高度相减是否大于1判断得到，大于1就False，小于1就True
 int64 fpsError      //帧率错误，即电机离线计数值，发送-3的mode值后会软件清零

@@ -216,7 +216,7 @@ def CrcTest():
     # 01 06 00 09 xx xx xx xx #设置启停时间
     # 01 03 00 58 00 01 05 D9 #读限位
     # 02 03 00 E3 00 01 75 CF #状态
-    data1 = [0x01, 0x06, 0x00, 0x02, 0x00, 0xC4]
+    data1 = [0x01, 0x03, 0x00, 0xE0, 0x00, 0x0A]
     a = crc.CalCRC16(data1, 6, 0x8005, 0xFFFF, 1, 0x0000)
     # a = crc.CalCRC8(data1, 1, 0x31, 0x00, 1, 0x00)
     # a = crc.CalCRC32(data1, 1, 0x04C11DB7, 0xFFFFFFFF, 0, 0x00000000)

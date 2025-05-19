@@ -38,6 +38,9 @@ class C_ROS_Server:
         if('callBackMode' in self.ctrl.GetMotorJsonConfig().keys()):
             self.callBackMode = self.ctrl.GetMotorJsonConfig()["callBackMode"]
         else: self.callBackMode = 1
+        if('topicHz' in self.ctrl.GetMotorJsonConfig().keys()):
+            self.topicHz = self.ctrl.GetMotorJsonConfig()["topicHz"]
+        else: self.topicHz = -1
         # 设定执行器末端速度，单位mm/s
         self.liftTargetSpd = abs((self.ctrl.GetMotorMaxSpd() * 10000) / (self.ctrl.reductionRatio * 60))
         if('initSpd' in self.ctrl.GetMotorJsonConfig().keys()):
@@ -132,6 +135,7 @@ class C_ROS_Server:
         将要pub出去的数据赋值
         '''
         if isinstance(self.motor_states, C_LiftingMotorCtrl.motor_msg):
+            self.motor_msgs.header.stamp = rospy.Time.now()
             # 当前话题电机id
             self.motor_msgs.motorId = self.motor_id
             # 初始化状态
@@ -172,7 +176,6 @@ class C_ROS_Server:
             # 升降柱当前高度
             self.motor_msgs.backHeight = self.motor_states.back_lift_height
             # 升降柱目标高度
-            # self.motor_msgs.targetHeight = self.ctrl.GetTargetHeight()
             self.motor_msgs.targetHeight = self.ctrl.GetTargetHeight()
             # 电机目标位置
             self.motor_msgs.targetPos = self.ctrl.GetTargetPos()
@@ -180,10 +183,12 @@ class C_ROS_Server:
             self.motor_msgs.upLimit = (self.motor_states.upLimit)
             # 电机下限位
             self.motor_msgs.downLimit = (self.motor_states.downLimit)
-        # 电机是否到达了目标位置，误差小于1认为到达了
-        if(abs(self.target_height - self.back_height) < 1): 
-            self.motor_msgs.reachTargetPos = True
-        else: self.motor_msgs.reachTargetPos = False
+            self.motor_msgs.upLimitHeight = self.ctrl.GetUpLimitHeight()
+            self.motor_msgs.downLimitHeight = self.ctrl.GetDownLimitHeight()
+            # 电机是否到达了目标位置，误差小于1认为到达了
+            if(abs(self.target_height - self.motor_states.back_lift_height)<=1): 
+                self.motor_msgs.reachTargetPos = True
+            else: self.motor_msgs.reachTargetPos = False
         self.motor_msgs.stopFlag = self.ctrl.GetStopFlag()
         self.motor_msgs.fpsError = self.fps_error
             # 发布
@@ -520,10 +525,9 @@ class C_ROS_Server:
             self.print_flag_init = False
                     # print("--------",self.motor_msgs.overLoad, self.motor_msgs.backCurrent, self.init_state)
         if(self.mode == 0xF1):
-            if(self.__initPos > 0):
-                self.ctrl.MotorStop(self.JudgeMotorDirection(), self.motor_states, force=False)
-                # 运动电机
-                self.ctrl.LiftMovePos(self.target_height)
+            self.ctrl.MotorStop(self.JudgeMotorDirection(), self.motor_states, force=False)
+            # 运动电机
+            self.ctrl.LiftMovePos(self.target_height)
             # self.mode = 0xF2
         if(self.mode == 0xF2):
             self.ctrl.LiftMoveSpd(0)
@@ -551,21 +555,20 @@ class C_ROS_Server:
         if(self.mode == 0 and self.fps_error <= 1):
             self.ctrl.MotorStop(self.JudgeMotorDirection(), self.motor_states, force=False)
             # 运动电机
-            self.ctrl.LiftMovePos(self.target_height)
+            if(not self.motor_msgs.reachTargetPos):
+                self.ctrl.LiftMovePos(self.target_height)
         # 过流保护
         if(self.ctrl.OverflowIProtect()):
             self.ctrl.MotorStop(self.JudgeMotorDirection(), self.motor_states, force=True)
-            rospy.logwarn("电机电流超过",self.ctrl.GetOverflowILimit(),"A并且反馈速度为0，判定是卡住")
+            rospy.logwarn(f"'电机电流超过'{self.ctrl.GetOverflowILimit()},'A并且反馈速度为0，判定是卡住'")
             self.target_speed = 0
             self.ctrl.LiftMoveSpd(self.target_speed)
             self.ctrl.MotorStop(self.JudgeMotorDirectionWithSpeed(), self.motor_states, force=True)
             self.ctrl.MotorClearBug()
             # raise("电机电流超过11A并且反馈速度为0，判定是卡住")
-    # 发布电机各种信息线程
-    def Thread(self, state) -> None:
+    # 更新电机信息
+    def UpdateDataAndCtrlThread(self, state) -> None:
         success_fps = 0
-        # lasst_time = time.time()
-        # count = 0
         while state == 1:
             self.motor_states = self.ctrl.ReadMotorData() #读取电机状态消息
             # ## 返回的字符串消息如果非空，publish电机消息并赋值当前升降柱高度
@@ -579,19 +582,28 @@ class C_ROS_Server:
                 success_fps = 0
                 self.fps_error = self.fps_error + 1
             # 发布消息
-            self.PublishMotorMsgs()
+            if(self.topicHz <= 0):
+                self.PublishMotorMsgs()
             # ## 模式控制
             self.ModeCtrl()
-            time.sleep(0.02)
+            # time.sleep(0.02)
+    
+    # 发布电机各种信息线程
+    def PubThread(self, state) -> None:
+        rate = rospy.Rate(50)
+        while not rospy.is_shutdown():
+            # 发布消息
+            self.PublishMotorMsgs()
+            rate.sleep()
     
     def Main(self, state) -> None:
         '''
         主函数
         '''
         # 创建线程
-        _thread.start_new_thread(self.Thread, (state,))
-        # 设置循环帧率为8hz
-
+        _thread.start_new_thread(self.UpdateDataAndCtrlThread, (state,))
+        if(self.topicHz > 0):
+            _thread.start_new_thread(self.PubThread, (state,))
         rospy.spin()
 
 

@@ -6,7 +6,7 @@ install/
 /src/CMakeLists.txt
 # Prerequisites
 *.d
-
+__pycache__
 # Compiled Object files
 *.slo
 *.lo

@@ -1,3 +1,4 @@
+Header header
 uint8 motorId
 bool initState
 
@@ -24,6 +25,8 @@ int64 targetHeight
 int64 targetPos
 bool upLimit
 bool downLimit
+int64 upLimitHeight
+int64 downLimitHeight
 
 bool reachTargetPos
 bool stopFlag
