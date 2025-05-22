@@ -1,7 +1,7 @@
 {
     "initMode":0,
     "baudRate": 38400 ,
-    "timeout":0.02,
+    "timeout":0.008,
     "dataFormat":"hex",
     "reductionRatio":2000,
     "responseTimeout":60,
@@ -10,7 +10,7 @@
     "callBackMode":1,
     "topicHz":50,
     "upLimitVal":0,
-    "downLimitVal":800,
+    "downLimitVal":-800,
     "initSpd":600,
     "initPos":0,
     "motorStallCurrent":15
